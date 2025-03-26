@@ -32,7 +32,7 @@ if __name__ == '__main__':
     args = get_args()
 
     # task_name = "go1plane"
-    # task_name = "go1gate"
+    task_name = "go1gate"
     # task_name = "go1football-defender"
     # task_name = "go1football-1vs1"
     # task_name = "go1football-2vs2"
@@ -40,10 +40,10 @@ if __name__ == '__main__':
     # task_name = "go1sheep-hard"
     # task_name = "go1seesaw"
     # task_name = "go1door"
-    task_name = "go1pushbox"
+    # task_name = "go1pushbox"
     # task_name = "go1tug"
     # task_name = "go1wrestling"
-    task_name = "go1rotationdoor"
+    # task_name = "go1rotationdoor"
     # task_name = "go1bridge"
 
     args.num_envs = 1
