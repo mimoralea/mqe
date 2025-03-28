@@ -16,7 +16,7 @@ class Go1PushboxWrapper(EmptyWrapper):
         self.action_scale = torch.tensor([[[2, 0.5, 0.5],],], device="cuda").repeat(self.num_envs, self.num_agents, 1)
 
         # for hard setting of reward scales (not recommended)
-        
+
         self.box_x_movement_reward_scale = 1
 
         self.reward_buffer = {
@@ -38,7 +38,7 @@ class Go1PushboxWrapper(EmptyWrapper):
             self._init_extras(obs_buf)
 
         box_pos = self.root_states_npc[:, :3] - self.env.env_origins
-        
+
         base_pos = obs_buf.base_pos
         base_rpy = obs_buf.base_rpy
         base_info = torch.cat([base_pos, base_rpy], dim=1).reshape([self.env.num_envs, self.env.num_agents, -1])
@@ -55,10 +55,10 @@ class Go1PushboxWrapper(EmptyWrapper):
         obs_buf, _, termination, info = self.env.step((action * self.action_scale).reshape(-1, self.action_space.shape[0]))
 
         box_pos = self.root_states_npc[:, :3] - self.env.env_origins
-        
+
         if getattr(self, "gate_pos", None) is None:
             self._init_extras(obs_buf)
-        
+
         base_pos = obs_buf.base_pos
         base_rpy = obs_buf.base_rpy
         base_info = torch.cat([base_pos, base_rpy], dim=1).reshape([self.env.num_envs, self.env.num_agents, -1])
@@ -76,7 +76,7 @@ class Go1PushboxWrapper(EmptyWrapper):
                 box_x_movement_reward = self.box_x_movement_reward_scale * x_movement
                 reward[:, 0] += box_x_movement_reward
                 self.reward_buffer["box movement reward"] += torch.sum(box_x_movement_reward).cpu()
-        
+
         reward = reward.repeat(1, self.num_agents)
 
         self.last_box_pos = copy(box_pos)

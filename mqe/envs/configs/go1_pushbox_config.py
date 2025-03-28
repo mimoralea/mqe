@@ -10,7 +10,7 @@ class Go1PushboxCfg(Go1Cfg):
         num_agents = 2
         num_npcs = 1
         episode_length_s = 15
-    
+
     class asset(Go1Cfg.asset):
         terminate_after_contacts_on = []
         file_npc = "{LEGGED_GYM_ROOT_DIR}/resources/objects/box.urdf"
@@ -18,7 +18,7 @@ class Go1PushboxCfg(Go1Cfg):
         npc_collision = True
         fix_npc_base_link = False
         npc_gravity = True
-    
+
     class terrain(Go1Cfg.terrain):
 
         num_rows = 1
@@ -53,7 +53,7 @@ class Go1PushboxCfg(Go1Cfg):
             no_perlin_threshold = 0.06,
             add_perlin_noise = False,
        ))
-        
+
     class command(Go1Cfg.command):
 
         class cfg(Go1Cfg.command.cfg):
@@ -121,5 +121,5 @@ class Go1PushboxCfg(Go1Cfg):
             # exceed_torque_limits_i = -2e-1
 
     class viewer(Go1Cfg.viewer):
-        pos = [0., 6., 5.]  # [m]
-        lookat = [4., 6., 0.]  # [m]
+        pos = [0., 3.5, 5.]  # [m]
+        lookat = [5., 3.5, 0.]  # [m]
