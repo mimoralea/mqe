@@ -1,4 +1,3 @@
-
 from __future__ import print_function, division, absolute_import
 
 from typing import Any, Dict, Optional, Union
@@ -29,7 +28,7 @@ from mqe.envs.go1.go1_config import Go1Cfg
 from openrl.envs.vec_env import BaseVecEnv
 
 def make_env(args, custom_cfg=None, single_agent=False):
-    
+
     env, env_cfg = make_mqe_env(args.task, args, custom_cfg=custom_cfg)
 
     if single_agent:
@@ -119,7 +118,7 @@ class MATWrapper(gym.Wrapper):
         ):
             observation = observation["policy"]
         return observation
-    
+
     def reset(self, **kwargs):
         """Reset all environments."""
         return self.env.reset(**kwargs)
@@ -129,7 +128,7 @@ class MATWrapper(gym.Wrapper):
         return self.env.step(actions, extra_data)
 
 class SingleAgentWrapper(gym.Wrapper):
-    
+
     def __init__(self, env):
         """Wraps an environment to allow a modular transformation of the :meth:`step` and :meth:`reset` methods.
 
@@ -230,7 +229,7 @@ def parse_arguments(parser, headless=False, no_graphics=False, custom_parameters
 def get_args():
 
     openrl_parser = create_config_parser()
-    
+
     custom_parameters = [
         {"name": "--task", "type": str, "default": "go1gate", "help": "Select task via name"},
         {"name": "--algo", "type": str, "default": "ppo", "help": "Select pipeline via name"},
@@ -238,7 +237,7 @@ def get_args():
         {"name": "--run_name", "type": str,  "help": "Name of the run. Overrides config file if provided."},
         {"name": "--load_run", "type": str,  "help": "Name of the run to load when resume=True. If -1: will load the last run. Overrides config file if provided."},
         {"name": "--checkpoint", "type": str,  "help": "Saved model checkpoint path. Overrides config file if provided."},
-        
+
         {"name": "--headless", "action": "store_true", "default": True, "help": "Force display off at all times"},
         {"name": "--horovod", "action": "store_true", "default": False, "help": "Use horovod for multi-gpu training"},
         {"name": "--rl_device", "type": str, "default": "cuda:0", "help": 'Device used by the RL algorithm, (cpu, gpu, cuda:0, cuda:1 etc..)'},
@@ -250,6 +249,7 @@ def get_args():
         {"name": "--use_tensorboard", "action": "store_true", "default": False, "help": "Use tensorboard for record"},
         {"name": "--exp_name", "type": str, "default": "default"},
         {"name": "--record_video", "action": "store_true", "default": False},
+        {"name": "--num_episodes", "type": int, "default": 5, "help": "Number of episodes to run during evaluation"},
     ]
     # parse arguments
     args = parse_arguments(
