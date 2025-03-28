@@ -10,15 +10,15 @@ class Go1SeesawCfg(Go1Cfg):
         num_agents = 2
         num_npcs = 1
         num_actions_npc = 1
-        episode_length_s = 10 # episode length in seconds
-    
+        episode_length_s = 30 # episode length in seconds
+
     class asset(Go1Cfg.asset):
         file_npc = "{LEGGED_GYM_ROOT_DIR}/resources/objects/seesaw.urdf"
         name_npc = "seesaw"
         npc_collision = True
         fix_npc_base_link = True
         npc_gravity = True
-    
+
     class terrain(Go1Cfg.terrain):
 
         num_rows = 1
@@ -114,7 +114,7 @@ class Go1SeesawCfg(Go1Cfg):
 
     class rewards(Go1Cfg.rewards):
         class scales:
-            
+
             height_reward_scale = 1
             success_reward_scale = 10
             contact_punishment_scale = -2
@@ -132,5 +132,5 @@ class Go1SeesawCfg(Go1Cfg):
             # exceed_torque_limits_i = -2e-1
 
     class viewer(Go1Cfg.viewer):
-        pos = [0., -2., 4.]  # [m]
-        lookat = [4., 2., 0.]  # [m]
+        pos = [9., 0., 3.]  # [m]
+        lookat = [6., 4., 0.]  # [m]

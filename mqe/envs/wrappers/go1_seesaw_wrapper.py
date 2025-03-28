@@ -14,7 +14,7 @@ class Go1SeesawWrapper(EmptyWrapper):
         self.action_scale = torch.tensor([[[2, 0.5, 0.5],],], device="cuda").repeat(self.num_envs, self.num_agents, 1)
 
         # for hard setting of reward scales (not recommended)
-        
+
         # self.height_reward_scale = 0
         # self.success_reward_scale = 0
 
@@ -31,7 +31,7 @@ class Go1SeesawWrapper(EmptyWrapper):
 
     def _init_extras(self, obs):
         return
-    
+
     def reset(self):
         obs_buf = self.env.reset()
 
@@ -51,7 +51,7 @@ class Go1SeesawWrapper(EmptyWrapper):
 
         if getattr(self, "gate_pos", None) is None:
             self._init_extras(obs_buf)
-        
+
         base_pos = obs_buf.base_pos
         base_rpy = obs_buf.base_rpy
         base_info = torch.cat([base_pos, base_rpy], dim=1).reshape([self.env.num_envs, self.env.num_agents, -1])
@@ -66,7 +66,7 @@ class Go1SeesawWrapper(EmptyWrapper):
 
             if not hasattr(self, "last_x_pos"):
                 self.last_x_pos = copy(x_pos)
-            
+
             x_reward = (x_pos - self.last_x_pos).sum(dim=1, keepdim=True)
             x_reward[self.env.reset_ids] = 0
 
@@ -114,7 +114,7 @@ class Go1SeesawWrapper(EmptyWrapper):
             fall = self.env.r_term_buff | self.env.p_term_buff
             reward[fall, 0] += self.fall_punishment_scale
             self.reward_buffer["fall punishment"] += self.fall_punishment_scale * torch.sum(fall).cpu()
-        
+
         reward = reward.repeat(1, self.num_agents)
 
         return obs, reward, termination, info
