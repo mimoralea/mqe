@@ -109,7 +109,7 @@ ENV_DICT = {
 }
 
 def make_mqe_env(env_name: str, args=None, custom_cfg=None) -> Tuple[LeggedRobotField, LeggedRobotFieldCfg]:
-    
+
     env_dict = ENV_DICT[env_name]
 
     if callable(custom_cfg):
@@ -118,17 +118,21 @@ def make_mqe_env(env_name: str, args=None, custom_cfg=None) -> Tuple[LeggedRobot
     env, env_cfg = make_env(env_dict["class"], env_dict["config"], args)
     env = env_dict["wrapper"](env)
 
+    # Store args in the environment config for later use (e.g., for video naming)
+    if args is not None:
+        env_cfg.args = args
+
     return env, env_cfg
 
 def custom_cfg(args):
 
     def fn(cfg:LeggedRobotFieldCfg):
-        
+
         if getattr(args, "num_envs", None) is not None:
             cfg.env.num_envs = args.num_envs
-        
+
         cfg.env.record_video = args.record_video
 
         return cfg
-    
+
     return fn
