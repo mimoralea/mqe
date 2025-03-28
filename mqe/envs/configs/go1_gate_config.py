@@ -8,7 +8,7 @@ class Go1GateCfg(Go1Cfg):
         env_name = "go1gate"
         num_envs = 1
         num_agents = 2
-        episode_length_s = 10 # episode length in seconds
+        episode_length_s = 15 # episode length in seconds
 
     class terrain(Go1Cfg.terrain):
 
@@ -49,7 +49,8 @@ class Go1GateCfg(Go1Cfg):
             no_perlin_threshold = 0.06,
             add_perlin_noise = False,
        ))
-        
+
+
     class command(Go1Cfg.command):
 
         class cfg(Go1Cfg.command.cfg):
@@ -71,30 +72,6 @@ class Go1GateCfg(Go1Cfg):
                 lin_vel = [0.0, 0.0, 0.0],
                 ang_vel = [0.0, 0.0, 0.0],
             ),
-            # init_state_class(
-            #     pos = [0.0, 0.5, 0.42],
-            #     rot = [0.0, 0.0, 0.0, 1.0],
-            #     lin_vel = [0.0, 0.0, 0.0],
-            #     ang_vel = [0.0, 0.0, 0.0],
-            # ),
-            # init_state_class(
-            #     pos = [0.0, 1.0, 0.42],
-            #     rot = [0.0, 0.0, 0.0, 1.0],
-            #     lin_vel = [0.0, 0.0, 0.0],
-            #     ang_vel = [0.0, 0.0, 0.0],
-            # ),
-            # init_state_class(
-            #     pos = [2.8, -0.3, 0.42],
-            #     rot = [0.0, 0.0, 0.0, 1.0],
-            #     lin_vel = [0.0, 0.0, 0.0],
-            #     ang_vel = [0.0, 0.0, 0.0],
-            # ),
-            # init_state_class(
-            #     pos = [3.6, -1, 0.42],
-            #     rot = [0.0, 0.0, 0.0, 1.0],
-            #     lin_vel = [0.0, 0.0, 0.0],
-            #     ang_vel = [0.0, 0.0, 0.0],
-            # ),
         ]
 
     class control(Go1Cfg.control):
@@ -106,13 +83,14 @@ class Go1GateCfg(Go1Cfg):
         termination_terms = [
             "roll",
             "pitch",
-            "z_low",
-            "z_high",
         ]
 
     class domain_rand(Go1Cfg.domain_rand):
-        init_base_pos_range = None
- 
+        init_base_pos_range = dict(
+            x=[-0.1, 0.1],
+            y=[-0.1, 0.1],
+        )
+
     class rewards(Go1Cfg.rewards):
         class scales:
 
