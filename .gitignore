@@ -49,7 +49,12 @@ Thumbs.db
 *.flv
 *.mov
 *.wmv
+*.mp4
 *.gif
+
+# Recording files but keep directory structure
+recordings/**/*.mp4
+recordings/**/*.gif
 
 # VS Code
 .vscode

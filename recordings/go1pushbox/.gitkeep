@@ -1,0 +1,2 @@
+# This file exists to keep the go1pushbox recordings directory in Git
+# Actual recording files will be ignored via .gitignore
