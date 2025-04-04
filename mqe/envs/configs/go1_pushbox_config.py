@@ -9,7 +9,7 @@ class Go1PushboxCfg(Go1Cfg):
         num_envs = 1
         num_agents = 2
         num_npcs = 1
-        episode_length_s = 15
+        episode_length_s = 30
 
     class asset(Go1Cfg.asset):
         terminate_after_contacts_on = []

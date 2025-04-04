@@ -1,6 +1,6 @@
-import numpy as np
 from mqe.utils.helpers import merge_dict
 from mqe.envs.go1.go1 import Go1Cfg
+
 
 class Go1GateCfg(Go1Cfg):
 
@@ -8,48 +8,68 @@ class Go1GateCfg(Go1Cfg):
         env_name = "go1gate"
         num_envs = 1
         num_agents = 2
-        episode_length_s = 15 # episode length in seconds
+        episode_length_s = 20  # episode length in seconds
+
+    class sim(Go1Cfg.sim):
+        class physx(Go1Cfg.sim.physx):
+            # Increase buffer sizes to handle the large number of collision pairs
+            max_gpu_contact_pairs = 2**24  # Increased from default
+            default_buffer_size_multiplier = 10  # Increased from default
+            
+            # Add specific parameters to fix the PhysX warnings
+            contact_collection = 2  # 0: never, 1: last sub-step, 2: all sub-steps
+            bounce_threshold_velocity = 0.2  # Reduced from default
+            friction_offset_threshold = 0.01
+            friction_correlation_distance = 0.025
+            
+            # These parameters address the specific errors in the logs
+            enable_gyroscopic_forces = False
+            enable_stabilization = True
+            stabilization_threshold = 0.001
+            
+            # Additional buffer capacity settings - use exact parameter names
+            foundLostAggregatePairsCapacity = 50000000  # Set to a value larger than the error message
+            foundLostPairsCapacity = 50000000  # Alternative parameter name that might be used
+            aggregateContactPairsCapacity = 50000000  # Related parameter that might need adjustment
 
     class terrain(Go1Cfg.terrain):
-
         num_rows = 1
         num_cols = 1
 
         BarrierTrack_kwargs = merge_dict(Go1Cfg.terrain.BarrierTrack_kwargs, dict(
-            options = [
+            options=[
                 "init",
                 "gate",
                 "plane",
                 "wall",
             ],
             # wall_thickness= 0.2,
-            track_width = 3.0,
+            track_width=3.0,
             # track_block_length = 2., # the x-axis distance from the env origin point
-            init = dict(
-                block_length = 2.0,
-                room_size = (1.0, 1.5),
-                border_width = 0.00,
-                offset = (0, 0),
+            init=dict(
+                block_length=2.0,
+                room_size=(1.0, 1.5),
+                border_width=0.00,
+                offset=(0, 0),
             ),
-            gate = dict(
-                block_length = 3.0,
-                width = 0.6,
-                depth = 0.1, # size along the forward axis
-                offset = (0, 0),
-                random = (0.5, 0.5),
+            gate=dict(
+                block_length=3.0,
+                width=0.6,
+                depth=0.1,  # size along the forward axis
+                offset=(0, 0),
+                random=(0.5, 0.5),
             ),
-            plane = dict(
-                block_length = 1.0,
+            plane=dict(
+                block_length=1.0,
             ),
-            wall = dict(
-                block_length = 0.1
+            wall=dict(
+                block_length=0.1
             ),
-            wall_height= 0.5,
-            virtual_terrain = False, # Change this to False for real terrain
-            no_perlin_threshold = 0.06,
-            add_perlin_noise = False,
-       ))
-
+            wall_height=0.5,
+            virtual_terrain=False,  # Change this to False for real terrain
+            no_perlin_threshold=0.06,
+            add_perlin_noise=False,
+        ))
 
     class command(Go1Cfg.command):
 

@@ -10,7 +10,7 @@ class Go1SeesawCfg(Go1Cfg):
         num_agents = 2
         num_npcs = 1
         num_actions_npc = 1
-        episode_length_s = 30 # episode length in seconds
+        episode_length_s = 45 # episode length in seconds
 
     class asset(Go1Cfg.asset):
         file_npc = "{LEGGED_GYM_ROOT_DIR}/resources/objects/seesaw.urdf"
