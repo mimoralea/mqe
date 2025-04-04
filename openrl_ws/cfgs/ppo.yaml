@@ -1,6 +1,6 @@
 lr: 7e-4
 critic_lr: 7e-4
-episode_length: 200
+episode_length: 400
 run_dir: ./results/
 log_interval: 5
 use_recurrent_policy: true

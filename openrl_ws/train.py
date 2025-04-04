@@ -1,8 +1,6 @@
-
 from openrl_ws.utils import make_env, get_args, MATWrapper
 from mqe.envs.utils import custom_cfg
 from openrl.utils.logger import Logger
-
 from datetime import datetime
 
 # import argparse
@@ -21,6 +19,13 @@ def train(args):
         single_agent = False
     
     env, env_cfg = make_env(args, custom_cfg(args), single_agent)
+    
+    # Ensure num_env_steps is set to fix the driver error
+    if not hasattr(args, 'num_env_steps') or args.num_env_steps is None:
+        if hasattr(args, 'train_timesteps') and args.train_timesteps is not None:
+            args.num_env_steps = args.train_timesteps
+        else:
+            args.num_env_steps = 1000000  # Default value
     
     if args.algo == "ppo":
         args.config = "./openrl_ws/cfgs/ppo.yaml"
@@ -51,9 +56,9 @@ def train(args):
         agent = PPOAgent(net)
         logger = Logger(
             cfg=net.cfg,
-            project_name="MQE",
+            project_name="mrc",
             scenario_name=args.task,
-            wandb_entity="ziyanx02",
+            wandb_entity="dmarl",
             exp_name=args.exp_name,
             log_path="./log",
             use_wandb=args.use_wandb,
@@ -64,7 +69,9 @@ def train(args):
             logger=logger
         )
     else:
-        agent.train(total_time_steps=args.train_timesteps)
+        agent.train(
+            total_time_steps=args.train_timesteps
+        )
     # dir_name = "./checkpoints/" + args.task + "/" + start_time_str
     dir_name = "./checkpoints/" + args.task
     agent.save(dir_name)
