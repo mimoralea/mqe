@@ -17,19 +17,19 @@ def train(args):
         single_agent = True
     else:
         single_agent = False
-    
+
     env, env_cfg = make_env(args, custom_cfg(args), single_agent)
-    
+
     # Ensure num_env_steps is set to fix the driver error
     if not hasattr(args, 'num_env_steps') or args.num_env_steps is None:
         if hasattr(args, 'train_timesteps') and args.train_timesteps is not None:
             args.num_env_steps = args.train_timesteps
         else:
             args.num_env_steps = 1000000  # Default value
-    
+
     if args.algo == "ppo":
         args.config = "./openrl_ws/cfgs/ppo.yaml"
-    
+
     elif args.algo == "jrpo":
         args.config = "./openrl_ws/cfgs/jrpo.yaml"
 
@@ -48,7 +48,7 @@ def train(args):
 
     else:
         raise NotImplementedError
-    
+
     if "po" in args.algo:
         from openrl.modules.common import PPONet
         from openrl.runners.common import PPOAgent
