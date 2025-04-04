@@ -43,6 +43,18 @@ class mqe_openrl_wrapper(gym.Wrapper):
         self.parallel_env_num = self.env.num_envs
         self.action_space = self.env.action_space
         self.observation_space = self.env.observation_space
+        
+        # Initialize episode reward tracking - use the same device as the environment
+        self.device = self.env.device
+        self.episode_rewards = torch.zeros(self.parallel_env_num, device=self.device)
+        self.episode_lengths = torch.zeros(self.parallel_env_num, device=self.device)
+        self.episode_count = 0
+        self.total_steps = 0
+        
+        # Logger reference (will be set by the driver)
+        self.logger = None
+        # Global step counter (will be updated by the driver)
+        self.global_step = 0
 
     def reset(self, **kwargs):
         """Reset all environments."""
@@ -51,17 +63,71 @@ class mqe_openrl_wrapper(gym.Wrapper):
 
     def step(self, actions, extra_data: Optional[Dict[str, Any]] = None):
         """Step all environments."""
-        actions = torch.from_numpy(0.5 * actions).cuda().clip(-1, 1)
+        actions = torch.from_numpy(0.5 * actions).to(self.device).clip(-1, 1)
 
         obs, reward, termination, info = self.env.step(actions)
-
+        
+        # Update global step if provided in extra_data
+        if extra_data is not None and "global_step" in extra_data:
+            self.global_step = extra_data["global_step"]
+        
+        # Handle reward shape correctly - if reward is [num_envs, num_agents, 1], reshape it
+        if reward.dim() == 3 and reward.shape[2] == 1:
+            # Reshape from [num_envs, num_agents, 1] to [num_envs, num_agents]
+            reward = reward.squeeze(-1)
+        
+        # Track episode rewards - make sure to keep everything on the same device
+        self.episode_rewards += reward.sum(dim=1)  # Keep on GPU
+        self.episode_lengths += 1
+        self.total_steps += 1
+        
+        # Convert tensors to numpy for the environment interface
         obs = obs.cpu().numpy()
-        rewards = reward.cpu().unsqueeze(-1).numpy()
+        
+        # Make sure rewards have the correct shape for the buffer: [num_envs, num_agents, 1]
+        # If reward is [num_envs, num_agents], add the extra dimension
+        if reward.dim() == 2:
+            rewards = reward.unsqueeze(-1).cpu().numpy()
+        else:
+            rewards = reward.cpu().unsqueeze(-1).numpy()
+            
         dones = termination.cpu().unsqueeze(-1).repeat(1, self.agent_num).numpy().astype(bool)
-
+        
+        # Create info dictionaries and track completed episodes
         infos = []
         for i in range(dones.shape[0]):
-            infos.append({})
+            info_dict = {}
+            # If the episode is done, add the episode reward to the info
+            if termination[i]:
+                # Increment episode counter
+                self.episode_count += 1
+                
+                # Get episode stats - move to CPU only when needed for logging
+                episode_reward = self.episode_rewards[i].item()  # .item() handles the device conversion
+                episode_length = self.episode_lengths[i].item()
+                
+                # Add to info dict for the driver
+                info_dict["episode"] = {
+                    "r": episode_reward,
+                    "l": episode_length,
+                    "t": self.global_step,  # Use global step instead of local step
+                    "n": self.episode_count
+                }
+                
+                # Log individual episode directly if logger is available
+                if self.logger is not None:
+                    # Log overall episode metrics
+                    self.logger.log_episode_info(
+                        episode_num=self.episode_count,
+                        reward=episode_reward,
+                        length=episode_length,
+                        global_step=self.global_step  # Use global step instead of local step
+                    )
+                
+                # Reset the episode tracking for this environment
+                self.episode_rewards[i] = 0
+                self.episode_lengths[i] = 0
+            infos.append(info_dict)
 
         return obs, rewards, dones, infos
 
@@ -73,9 +139,10 @@ class mqe_openrl_wrapper(gym.Wrapper):
         return False
 
     def batch_rewards(self, buffer):
-
         step_count = self.env.reward_buffer["step count"]
         reward_dict = {"average step reward": 0}
+        
+        # Process step rewards as before
         for k in self.env.reward_buffer.keys():
             if k == "step count":
                 continue
@@ -86,7 +153,12 @@ class mqe_openrl_wrapper(gym.Wrapper):
                 reward_dict["average step reward"] += reward_dict[k]
             self.env.reward_buffer[k] = 0
         self.env.reward_buffer["step count"] = 0
+        
         return reward_dict
+
+    def log_episode_rewards(self):
+        # Log episode rewards
+        print(f"Episode {self.episode_count}: reward={self.episode_rewards.mean().item():.2f}, length={self.episode_lengths.mean().item():.2f}")
 
 class MATWrapper(gym.Wrapper):
     @property
@@ -261,4 +333,12 @@ def get_args():
     args.sim_device = args.sim_device_type
     if args.sim_device=='cuda':
         args.sim_device += f":{args.sim_device_id}"
+    
+    # Set num_env_steps to match train_timesteps to fix driver error
+    if hasattr(args, 'train_timesteps') and args.train_timesteps is not None:
+        args.num_env_steps = args.train_timesteps
+    else:
+        # Default value if train_timesteps is not provided
+        args.num_env_steps = 1000000
+        
     return args
