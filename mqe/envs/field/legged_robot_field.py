@@ -128,19 +128,23 @@ class LeggedRobotField(LeggedRobot):
         z = self.root_states[:, 2] - self.agent_origins.reshape(-1, 3)[:, 2]
 
         if "roll" in self.cfg.termination.termination_terms:
-            self.r_term_buff = (torch.abs(r) > self.cfg.termination.roll_kwargs["threshold"]).reshape(self.num_envs, -1).sum(1).to(torch.bool)
+            self.r_term_buff_each = (torch.abs(r) > self.cfg.termination.roll_kwargs["threshold"]).reshape(self.num_envs, -1)
+            self.r_term_buff = self.r_term_buff_each.sum(1).to(torch.bool)
             self.reset_buf |= self.r_term_buff
 
         if "pitch" in self.cfg.termination.termination_terms:
-            self.p_term_buff = (torch.abs(p) > self.cfg.termination.pitch_kwargs["threshold"]).reshape(self.num_envs, -1).sum(1).to(torch.bool)
+            self.p_term_buff_each = (torch.abs(p) > self.cfg.termination.pitch_kwargs["threshold"]).reshape(self.num_envs, -1)
+            self.p_term_buff = self.p_term_buff_each.sum(1).to(torch.bool)
             self.reset_buf |= self.p_term_buff
 
         if "z_low" in self.cfg.termination.termination_terms:
-            z_low_term_buff = (z < self.cfg.termination.z_low_kwargs["threshold"]).reshape(self.num_envs, -1).sum(1).to(torch.bool)
-            self.reset_buf |= z_low_term_buff
+            self.z_low_term_buff_each = (z < self.cfg.termination.z_low_kwargs["threshold"]).reshape(self.num_envs, -1)
+            self.z_low_term_buff = self.z_low_term_buff_each.sum(1).to(torch.bool)
+            self.reset_buf |= self.z_low_term_buff
 
         if "z_high" in self.cfg.termination.termination_terms:
-            self.z_high_term_buff = (z > self.cfg.termination.z_high_kwargs["threshold"]).reshape(self.num_envs, -1).sum(1).to(torch.bool)
+            self.z_high_term_buff_each = (z > self.cfg.termination.z_high_kwargs["threshold"]).reshape(self.num_envs, -1)
+            self.z_high_term_buff = self.z_high_term_buff_each.sum(1).to(torch.bool)
             self.reset_buf |= self.z_high_term_buff
         
         return return_

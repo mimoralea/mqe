@@ -161,7 +161,8 @@ class LeggedRobot(BaseTask):
         """
         if len(self.termination_contact_indices):
             contact_forces = self.contact_forces[:, : self.num_agents * self.num_bodies, :].reshape(self.num_envs, self.num_agents, self.num_bodies, -1)
-            self.collide_buf = torch.any(torch.norm(contact_forces[:, :, self.termination_contact_indices, :], dim=-1).reshape(self.num_envs, -1) > 1., dim=1)
+            self.collide_buf_each = torch.norm(contact_forces[:, :, self.termination_contact_indices, :], dim=-1).reshape(self.num_envs, -1) > 1.
+            self.collide_buf = torch.any(self.collide_buf_each, dim=1)
             self.reset_buf = self.collide_buf
         else:
             self.reset_buf = False
