@@ -22,7 +22,7 @@ class Go1(LeggedRobotField):
         self.cfg = cfg
         self.env_name = cfg.env.env_name
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
-        
+
         self.obs_buf = copy(self.cfg.obs)
         self.privileged_obs_buf = copy(self.cfg.privileged_obs)
 
@@ -33,7 +33,7 @@ class Go1(LeggedRobotField):
             self._prepare_locomotion_policy()
 
     def step(self, action):
-        
+
         if self.cfg.control.control_type == "C":
             action = torch.clip(action, -1, 1)
             action = self.preprocess_action(action)
@@ -54,28 +54,28 @@ class Go1(LeggedRobotField):
             if self.device == 'cpu':
                 self.gym.fetch_results(self.sim, True)
             self.gym.refresh_dof_state_tensor(self.sim)
-            
+
             self.post_decimation_step(dec_i)
 
         self.post_physics_step()
-        
+
         return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
-    
+
     def preprocess_action(self, actions):
 
         if self.cfg.command.cfg.vel:
             self.locomotion_obs[:, 3:5] = actions[:, self.vel_idx : self.vel_idx + 2] * self.cfg.control.obs_scales.lin_vel
             self.locomotion_obs[:, 5] = actions[:, self.vel_idx + 2] * self.cfg.control.obs_scales.ang_vel
-        
+
         if self.cfg.command.cfg.body_height:
             self.locomotion_obs[:, 6] = actions[:, self.body_height_idx] * self.cfg.control.obs_scales.body_height
-        
+
         if self.cfg.command.cfg.gait_freq:
             self.locomotion_obs[:, 7] = actions[:, self.gait_freq_idx] * self.cfg.control.obs_scales.gait_freq
 
         if self.cfg.command.cfg.gait:
             raise NotImplementedError
-            
+
         if self.cfg.command.cfg.footswing_height:
             self.locomotion_obs[:, 12] = actions[:, self.footswing_height_idx] * self.cfg.control.obs_scales.footswing_height
 
@@ -126,7 +126,7 @@ class Go1(LeggedRobotField):
         # avoid updating command curriculum at each step since the maximum command is common to all envs
         # if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length==0):
         #     self.update_command_curriculum(env_ids)
-        
+
         self._fill_extras(env_ids)
 
         # reset robot states
@@ -137,7 +137,7 @@ class Go1(LeggedRobotField):
         self._reset_buffers(env_ids)
 
         self.store_recording(env_ids)
-    
+
     def _reset_buffers(self, env_ids):
         super()._reset_buffers(env_ids)
         agent_ids = self.env_agent_indices[env_ids].reshape(-1)
@@ -149,7 +149,7 @@ class Go1(LeggedRobotField):
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
         self.compute_observations()
         return self.obs_buf
-    
+
     def compute_observations(self):
         """ Computes observations
         """
@@ -184,14 +184,14 @@ class Go1(LeggedRobotField):
 
         if self.cfg.obs.cfgs.projected_gravity or self.cfg.control.control_type == "C":
             self.obs_buf.projected_gravity = copy(self.projected_gravity)
-        
+
         if self.cfg.obs.cfgs.clock_inputs or self.cfg.control.control_type == "C":
             assert self.cfg.control.control_type == "C", "To active clock_inputs, control_type should be set to \"C\" instead of \"{}\"".format(self.cfg.control.control_type)
             self.obs_buf.clock_inputs = copy(self.clock_inputs)
-        
+
         if self.cfg.obs.cfgs.base_rpy:
             self.obs_buf.base_rpy = torch.stack(get_euler_xyz(self.base_quat), dim=1)
-        
+
         if self.cfg.obs.cfgs.env_info and hasattr(self, "env_info"):
             self.obs_buf.env_info = self.env_info
 
@@ -203,7 +203,7 @@ class Go1(LeggedRobotField):
         for key in list(self.reward_scales.keys()):
             scale = self.reward_scales[key]
             if scale==0:
-                self.reward_scales.pop(key) 
+                self.reward_scales.pop(key)
             else:
                 self.reward_scales[key] *= self.dt
         # prepare list of functions
@@ -213,7 +213,7 @@ class Go1(LeggedRobotField):
             if name=="termination":
                 continue
             self.reward_names.append(name)
-        
+
         # reward episode sums
         self.episode_sums = {name: torch.zeros(self.num_envs * self.num_agents, dtype=torch.float, device=self.device, requires_grad=False)
                              for name in self.reward_scales.keys()}
@@ -222,7 +222,7 @@ class Go1(LeggedRobotField):
         """ Callback called before computing terminations, rewards, and observations
             Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
         """
-        # 
+        #
         # env_ids = (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt)==0).nonzero(as_tuple=False).flatten()
         # self._resample_commands(env_ids)
         self._step_contact_targets()
@@ -333,7 +333,7 @@ class Go1(LeggedRobotField):
         control_type = self.cfg.control.control_type
 
         if control_type == "C" or control_type == "control_net":
-            
+
             if self.cfg.domain_rand.randomize_lag_timesteps:
                 self.lag_buffer = self.lag_buffer[1:] + [actions_scaled.clone()]
                 self.joint_pos_target = self.lag_buffer[0] + self.default_dof_pos
@@ -393,19 +393,19 @@ class Go1(LeggedRobotField):
         locomotion_obs = self._fill_command_obs()
         self.locomotion_obs = locomotion_obs.repeat([self.num_envs * self.num_agents, 1])
         self.history_locomotion_obs = torch.zeros(self.num_envs * self.num_agents, 2100, dtype=torch.float, device=self.device, requires_grad=False)
-        
+
         body = torch.jit.load(self.cfg.control.locomotion_policy_dir + '/body_latest.jit', map_location=self.device)
         adaptation_module = torch.jit.load(self.cfg.control.locomotion_policy_dir + '/adaptation_module_latest.jit', map_location=self.device)
 
         def policy(obs, info={}):
             with torch.no_grad():
-                
+
                 latent = adaptation_module.forward(obs)
                 action = body.forward(torch.cat((obs, latent), dim=-1))
 
             info['latent'] = latent
             return action
-        
+
         self.locomotion_policy = policy
 
     def _fill_command_obs(self):
@@ -423,13 +423,13 @@ class Go1(LeggedRobotField):
         else:
             self.vel_idx = idx
             idx += 3
-        
+
         if not self.cfg.command.cfg.body_height:
             locomotion_obs[0, 6] = self.cfg.control.default_command.body_height * self.cfg.control.obs_scales.body_height
         else:
             self.body_height_idx = idx
             idx += 1
-        
+
         if not self.cfg.command.cfg.gait_freq:
             locomotion_obs[0, 7] = self.cfg.control.default_command.gait_freq * self.cfg.control.obs_scales.gait_freq
         else:
@@ -444,7 +444,7 @@ class Go1(LeggedRobotField):
         else:
             self.gait_idx = idx
             idx += 4
-            
+
         if not self.cfg.command.cfg.footswing_height:
             locomotion_obs[0, 12] = self.cfg.control.default_command.footswing_height * self.cfg.control.obs_scales.footswing_height
         else:
