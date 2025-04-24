@@ -57,7 +57,7 @@ class Go1GateCfg(Go1Cfg):
                 width=0.6,
                 depth=0.1,  # size along the forward axis
                 offset=(0, 0),
-                random=(0.5, 0.5),
+                random=(0.0, 0.0),
             ),
             plane=dict(
                 block_length=1.0,

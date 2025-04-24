@@ -1,10 +1,113 @@
 import gym
 from gym import spaces
-import numpy
+import numpy as np
 import torch
-from copy import copy
+from enum import IntEnum, Enum, auto
 from mqe.envs.wrappers.empty_wrapper import EmptyWrapper
-from isaacgym.torch_utils import get_euler_xyz
+
+"""
+Go1Gate Environment
+==================
+
+Description
+----------
+The Go1Gate environment is a multi-agent reinforcement learning environment where Unitree Go1 robots
+need to navigate through a gate. The environment is designed to train agents to coordinate and navigate
+efficiently through a constrained space while avoiding collisions with walls and other agents.
+
+Observation Space
+----------------
+Each agent receives a 13-dimensional observation vector:
+
+- Indices 0-2: Robot orientation (roll, pitch, yaw) in radians
+- Indices 3-4: Relative position (x, y) to the other agent
+- Index 5: Binary flag indicating if teammate has crossed the gate (1.0 = crossed)
+- Indices 6-7: Relative position (x, y) to the gate
+- Index 8: Binary flag indicating if this agent has crossed the gate (1.0 = crossed)
+- Indices 9-12: Distances to the walls (left, right, back, front)
+  - Left wall at y = -1.5
+  - Right wall at y = 1.5
+  - Back wall at x = 0
+  - Front wall at x = 6.1
+
+Action Space
+-----------
+The action space is a 3-dimensional continuous space with values in the range [-1, 1]:
+- Forward/backward movement
+- Left/right movement
+- Yaw rotation
+
+These actions are scaled by [2, 0.5, 0.5] respectively before being applied to the robot.
+
+Termination Conditions
+--------------------
+An episode terminates when any of the following conditions are met:
+1. All agents successfully cross the gate (gate)
+2. An agent collides with another agent or obstacle (collision)
+3. An agent exceeds roll or pitch thresholds (roll/pitch)
+4. The episode reaches the maximum time limit (timeout)
+
+Reward Structure
+--------------
+Terminal Rewards:
+- Gate crossing (GATE = 10.0): Awarded when all agents successfully cross the gate
+- Timeout (TIMEOUT = -10.0): Penalty for not completing the task within the time limit
+- Collision (COLLISION = -10.0): Penalty for colliding with obstacles or other agents
+- Roll/Pitch (ROLL/PITCH = -10.0): Penalty for excessive roll or pitch angles
+
+Shaping Rewards:
+1. X-axis Shaping: Encourages progress toward the gate along the x-axis
+   - Progression (0.01): Given when moving toward the gate or when already past the gate
+   - Regression (-0.02): Penalty for moving away from the gate
+
+2. Y-axis Shaping: Encourages movement toward the center of the gate along the y-axis
+   - Progression (0.01): Given when moving toward the center, when very close to center,
+     or when already past the gate
+   - Regression (-0.02): Penalty for moving away from the center
+
+3. Wall Avoidance Shaping: Discourages proximity to walls
+   - Wall penalty (-0.01): Applied when an agent is within 0.15 units of any wall
+   - No penalty (0.0): When the agent maintains a safe distance from all walls
+"""
+
+class ObservationIndex(IntEnum):
+    """Indices for the observation vector components in the Go1Gate environment.
+
+    These indices define the structure of the observation space, which includes
+    information about the robot's orientation, relative positions to other agents
+    and the gate, gate crossing status, and distances to walls.
+    """
+    ROLL = 0                # Roll angle of the robot in radians
+    PITCH = 1               # Pitch angle of the robot in radians
+    YAW = 2                 # Yaw angle of the robot in radians
+    OTHER_REL_X = 3         # Relative X position to the other agent
+    OTHER_REL_Y = 4         # Relative Y position to the other agent
+    OTHER_CROSSED_GATE = 5  # Binary flag indicating if teammate has crossed the gate (1.0 = crossed)
+    GATE_REL_X = 6          # Relative X position to the gate
+    GATE_REL_Y = 7          # Relative Y position to the gate
+    MY_CROSSED_GATE = 8     # Binary flag indicating if this agent has crossed the gate (1.0 = crossed)
+    LEFT_WALL_DIST = 9      # Distance to the left wall (y = -1.5)
+    RIGHT_WALL_DIST = 10    # Distance to the right wall (y = 1.5)
+    BACK_WALL_DIST = 11     # Distance to the back wall (x = 0)
+    FRONT_WALL_DIST = 12    # Distance to the front wall (x = 6.1)
+
+
+class RewardScale:
+    """Reward scale values for different components of the reward function.
+
+    These values define the magnitude of rewards and penalties for various
+    events and behaviors in the Go1Gate environment.
+    """
+    GATE = 10.0                # Reward for successfully passing through the gate
+    TIMEOUT = -10.0            # Penalty for timing out (not completing the task in time)
+    COLLISION = -10.0          # Penalty for colliding with obstacles or other agents
+    ROLL = -10.0               # Penalty for excessive roll angle
+    PITCH = -10.0              # Penalty for excessive pitch angle
+    PROGRESSION_SHAPING = 0.01 # Small reward for moving toward the goal (shaping)
+    REGRESSION_SHAPING = -0.02 # Small penalty for moving away from the goal (shaping)
+    WALL_SHAPING = -0.01       # Small penalty for being too close to walls (shaping)
+    UNDEFINED = 0.0            # Default reward for undefined conditions
+
 
 class Go1GateWrapper(EmptyWrapper):
     def __init__(self, env):
@@ -32,7 +135,7 @@ class Go1GateWrapper(EmptyWrapper):
             "gate": None,
             "x_axis_shaping": None,
             "y_axis_shaping": None,
-            "crossed_shaping": None,
+            "wall_shaping": None,
             "undefined": None,
         }
 
@@ -52,20 +155,9 @@ class Go1GateWrapper(EmptyWrapper):
         # Initialize extras
         self._init_extras(None)
 
-        # Reward scales
-        self.gate_reward = 10.0
-        self.timeout_reward = 0.0
-        self.collision_reward = 0.0
-        self.roll_reward = 0.0
-        self.pitch_reward = 0.0
-        self.cleared_shaping = 0.1
-        self.closer_shaping = 0.01
-        self.further_shaping = 0.0
-        self.crossed_shaping = 0.0
-        self.undefined_reward = 0.0
-
-        # Update observation space to the enhanced 8-dimensional space
-        self.observation_space = spaces.Box(low=-float('inf'), high=float('inf'), shape=(10,), dtype=float)
+        self.observation_space = gym.spaces.Box(
+            low=-np.inf, high=np.inf, shape=(13,)
+        )
         self.action_space = spaces.Box(low=-1, high=1, shape=(3,), dtype=float)
         self.action_scale = torch.tensor([[[2, 0.5, 0.5],],], device="cuda").repeat(self.num_envs, self.num_agents, 1)
 
@@ -107,6 +199,14 @@ class Go1GateWrapper(EmptyWrapper):
         # Set y coordinate (slightly different for each agent to encourage different behaviors)
         self.target_pos[:, 0, 1] = self.BarrierTrack_kwargs["track_width"] / 4
         self.target_pos[:, 1, 1] = -self.BarrierTrack_kwargs["track_width"] / 4
+        # Add these lines at the end of _init_extras
+        self.left_wall_y = -self.BarrierTrack_kwargs["track_width"] / 2
+        self.right_wall_y = self.BarrierTrack_kwargs["track_width"] / 2
+        self.back_wall_x = 0.0  # Origin
+        self.front_wall_x = (self.BarrierTrack_kwargs["init"]["block_length"] +
+                            self.BarrierTrack_kwargs["gate"]["block_length"] +
+                            self.BarrierTrack_kwargs["plane"]["block_length"] +
+                            self.BarrierTrack_kwargs["wall"]["block_length"])
 
     def _process_observations(self, obs):
         """
@@ -143,7 +243,7 @@ class Go1GateWrapper(EmptyWrapper):
         base_rpy_reshaped = base_rpy.reshape(self.env.num_envs, self.env.num_agents, 3)
 
         # Base robot orientation (3D: roll, pitch, yaw)
-        next_obs[:, :, 0:3] = base_rpy_reshaped
+        next_obs[:, :, ObservationIndex.ROLL:ObservationIndex.YAW+1] = base_rpy_reshaped
 
         for agent_idx in range(self.env.num_agents):
             # get absolute positions
@@ -154,19 +254,36 @@ class Go1GateWrapper(EmptyWrapper):
 
             # Calculate relative position (x,y) to the other agent
             other_rel_pos = other_pos - my_pos
-            next_obs[:, agent_idx, 3:5] = other_rel_pos
+            next_obs[:, agent_idx, ObservationIndex.OTHER_REL_X:ObservationIndex.OTHER_REL_Y+1] = other_rel_pos
 
             # Has my teammate crossed the gate?
-            other_gate_crossed = (base_pos_reshaped[:, other_agent_idx, 0] > (self.gate_distance+0.3)).float()
-            next_obs[:, agent_idx, 5] = other_gate_crossed
+            other_gate_crossed = (base_pos_reshaped[:, other_agent_idx, 0] > (self.gate_distance+0.5)).float()
+            next_obs[:, agent_idx, ObservationIndex.OTHER_CROSSED_GATE] = other_gate_crossed
 
             # Calculate relative position (x,y) to the gate
             gate_rel_pos = gate_pos - my_pos
-            next_obs[:, agent_idx, 6:8] = gate_rel_pos
+            next_obs[:, agent_idx, ObservationIndex.GATE_REL_X:ObservationIndex.GATE_REL_Y+1] = gate_rel_pos
 
             # Have I crossed the gate?
-            my_gate_crossed = (base_pos_reshaped[:, agent_idx, 0] > (self.gate_distance+0.3)).float()
-            next_obs[:, agent_idx, 9] = my_gate_crossed
+            my_gate_crossed = (base_pos_reshaped[:, agent_idx, 0] > (self.gate_distance+0.5)).float()
+            next_obs[:, agent_idx, ObservationIndex.MY_CROSSED_GATE] = my_gate_crossed
+
+            # Calculate distances to walls
+            # Distance to left wall
+            left_wall_distance = my_pos[:, 1] - self.left_wall_y
+            next_obs[:, agent_idx, ObservationIndex.LEFT_WALL_DIST] = left_wall_distance
+
+            # Distance to right wall
+            right_wall_distance = self.right_wall_y - my_pos[:, 1]
+            next_obs[:, agent_idx, ObservationIndex.RIGHT_WALL_DIST] = right_wall_distance
+
+            # Distance to back wall
+            back_wall_distance = my_pos[:, 0] - self.back_wall_x
+            next_obs[:, agent_idx, ObservationIndex.BACK_WALL_DIST] = back_wall_distance
+
+            # Distance to front wall
+            front_wall_distance = self.front_wall_x - my_pos[:, 0]
+            next_obs[:, agent_idx, ObservationIndex.FRONT_WALL_DIST] = front_wall_distance
 
         return next_obs
 
@@ -224,7 +341,7 @@ class Go1GateWrapper(EmptyWrapper):
         # CALCULATE TERMINATION CONDITIONS
         # Store termination reasons in the terminal buffer
         batch_indices = torch.arange(self.env.num_envs, device=self.device)
-        g = next_obs[:, :, 9].to(torch.bool)
+        g = next_obs[:, :, ObservationIndex.MY_CROSSED_GATE].to(torch.bool)
         ga = g.all(1).unsqueeze(1).repeat(1, self.env.num_agents)
         t = self.env.time_out_buf.unsqueeze(1).repeat(1, self.env.num_agents)
         c = self.env.collide_buf_each
@@ -262,53 +379,73 @@ class Go1GateWrapper(EmptyWrapper):
         # CALCULATE REWARDS
         # CALCULATE REWARDS
         # Now calculate rewards based on the termination conditions
-        self.rewards["gate"][batch_indices, :, self.ts] = self.dones["gate"][batch_indices, :, self.ts] * self.gate_reward
-        self.rewards["timeout"][batch_indices, :, self.ts] = self.dones["timeout"][batch_indices, :, self.ts] * self.timeout_reward
-        self.rewards["collision"][batch_indices, :, self.ts] = self.dones["collision"][batch_indices, :, self.ts] * self.collision_reward
-        self.rewards["pitch"][batch_indices, :, self.ts] = self.dones["pitch"][batch_indices, :, self.ts] * self.pitch_reward
-        self.rewards["roll"][batch_indices, :, self.ts] = self.dones["roll"][batch_indices, :, self.ts] * self.roll_reward
-        self.rewards["undefined"][batch_indices, :, self.ts] = self.dones["undefined"][batch_indices, :, self.ts] * self.undefined_reward
+        self.rewards["gate"][batch_indices, :, self.ts] = self.dones["gate"][batch_indices, :, self.ts] * RewardScale.GATE
+        self.rewards["timeout"][batch_indices, :, self.ts] = self.dones["timeout"][batch_indices, :, self.ts] * RewardScale.TIMEOUT
+        self.rewards["collision"][batch_indices, :, self.ts] = self.dones["collision"][batch_indices, :, self.ts] * RewardScale.COLLISION
+        self.rewards["pitch"][batch_indices, :, self.ts] = self.dones["pitch"][batch_indices, :, self.ts] * RewardScale.PITCH
+        self.rewards["roll"][batch_indices, :, self.ts] = self.dones["roll"][batch_indices, :, self.ts] * RewardScale.ROLL
+        self.rewards["undefined"][batch_indices, :, self.ts] = self.dones["undefined"][batch_indices, :, self.ts] * RewardScale.UNDEFINED
 
-        # Calculate change in x-position for each agent
-        delta_xy = next_obs[:, :, 6:8] - self.obs[:, :, 6:8]
+        # Calculate change in x- and y-position for each agent
+        delta_xy = next_obs[:, :, ObservationIndex.GATE_REL_X:ObservationIndex.GATE_REL_Y+1] - self.obs[:, :, ObservationIndex.GATE_REL_X:ObservationIndex.GATE_REL_Y+1]
 
         # Get x component while preserving batch dimensions
         delta_x = delta_xy[:, :, 0]
+
+        # X-axis shaping: reward for moving towards the gate
+        # If delta_x < 0, the agent is moving towards the gate (gate_rel_pos[0] is decreasing)
+        # Give progression reward if:
+        # 1. Moving towards the gate (delta_x < 0), or
+        # 2. Already cleared the gate (g)
+        # Otherwise, give regression penalty
         x_axis_shaping = torch.where(
-            delta_x < 0,
-            self.closer_shaping,
-            self.further_shaping
-        )
-        x_axis_shaping = torch.where(
-            g,
-            self.cleared_shaping,
-            x_axis_shaping
+            (delta_x < 0) | g,  # If moving towards gate OR already cleared gate
+            RewardScale.PROGRESSION_SHAPING,  # Reward for progress or maintaining goal
+            RewardScale.REGRESSION_SHAPING  # Penalty for moving away from goal
         )
         self.rewards["x_axis_shaping"][batch_indices, :, self.ts] = x_axis_shaping
 
-        # # Calculate change in y-position for each agent
-        # next_y = next_obs[:, :, 7]
-        # delta_y = next_y - self.obs[:, :, 7]
-        # y_axis_shaping = torch.where(
-        #     next_y.abs() < 0.1,
-        #     self.closer_shaping,
-        #     self.further_shaping
-        # )
-        # y_axis_shaping = torch.where(
-        #     delta_y > 0,
-        #     self.closer_shaping,
-        #     self.further_shaping
-        # )
-        # y_axis_shaping = torch.where(
-        #     g,
-        #     self.cleared_shaping,
-        #     y_axis_shaping
-        # )
-        # self.rewards["y_axis_shaping"][batch_indices, :, self.ts] = y_axis_shaping
-        self.rewards["y_axis_shaping"][batch_indices, :, self.ts] = 0.0
+        # Calculate y-axis shaping based on movement towards center of gate
+        # next_y is the y-component of the relative position to the gate
+        next_y = next_obs[:, :, ObservationIndex.GATE_REL_Y]
+        delta_y = next_y.abs() - self.obs[:, :, ObservationIndex.GATE_REL_Y].abs()  # Change in absolute distance to center
 
-        # Add shaping for crossing the gate, while you wait for the teammate
-        self.rewards["crossed_shaping"][batch_indices, :, self.ts] = g * self.crossed_shaping
+        # Y-axis shaping: reward for moving towards the center of the gate
+        # Give progression reward if:
+        # 1. Moving towards the center (delta_y < 0), or
+        # 2. Very close to the center (next_y.abs() < 0.15), or
+        # 3. Already cleared the gate (g)
+        # Otherwise, give regression penalty
+        y_axis_shaping = torch.where(
+            (delta_y < 0) | (next_y.abs() < 0.15) | g,  # Progress OR at goal OR cleared gate
+            RewardScale.PROGRESSION_SHAPING,  # Reward for progress or maintaining goal
+            RewardScale.REGRESSION_SHAPING  # Penalty for moving away from goal
+        )
+        self.rewards["y_axis_shaping"][batch_indices, :, self.ts] = y_axis_shaping
+
+        # Calculate wall avoidance shaping reward
+        # Get distances to all walls from the observation vector
+        left_wall_distance = next_obs[:, :, ObservationIndex.LEFT_WALL_DIST]
+        right_wall_distance = next_obs[:, :, ObservationIndex.RIGHT_WALL_DIST]
+        back_wall_distance = next_obs[:, :, ObservationIndex.BACK_WALL_DIST]
+        front_wall_distance = next_obs[:, :, ObservationIndex.FRONT_WALL_DIST]
+
+        # Check if agent is too close to any wall (less than 0.15 units)
+        too_close_to_left = left_wall_distance < 0.15
+        too_close_to_right = right_wall_distance < 0.15
+        too_close_to_back = back_wall_distance < 0.15
+        too_close_to_front = front_wall_distance < 0.15
+
+        # Combine all conditions - if any is true, agent is too close to a wall
+        too_close_to_any_wall = too_close_to_left | too_close_to_right | too_close_to_back | too_close_to_front
+
+        # Apply wall shaping reward: -0.01 if too close, 0 otherwise
+        wall_shaping = torch.where(
+            too_close_to_any_wall,
+            RewardScale.WALL_SHAPING,  # Negative reward for being too close
+            0.0  # No penalty if not too close
+        )
+        self.rewards["wall_shaping"][batch_indices, :, self.ts] = wall_shaping
 
         # Create per agent sum of rewards, shape [num_envs, num_agents]
         agent_rewards = torch.zeros((self.env.num_envs, self.env.num_agents), device=self.device)
